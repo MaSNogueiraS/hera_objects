@@ -8,6 +8,7 @@ import tf
 
 from hera_objects.msg import ObjectPosition, DicBoxes
 from hera_objects.srv import FindObject, FindSpecificObject
+from detector_2d.srv import DetectAndPublish
 
 class Objects:
 
@@ -16,24 +17,26 @@ class Objects:
         self._specific = dict()
         self._positions = dict()
         self._obj = None
-        rospy.Subscriber('/detector_2d_node/boxes_coordinates', DicBoxes, self.get_detected_objects)
+
+        # rospy.Subscriber('/detector_2d_node/boxes_coordinates', DicBoxes, self.get_detected_objects)
 
         rospy.Service('objects', FindObject, self.handler)
         rospy.Service('specific_object', FindSpecificObject, self.specific_handler)
 
+        self.detector = rospy.ServiceProxy('/detector', DetectAndPublish)
+
         self.listener = tf.TransformListener()
-        self.reference_frame = '/zed2_camera_center'
+        self.reference_frame = '/zed2i_camera_center'
 
         self._coordinates = ObjectPosition()
 
         rospy.loginfo("[Objects] Dear Operator, I'm ready to give you object coordinates")
 
-    def get_detected_objects(self, array): 
-        #rospy.loginfo(array)
-        rospy.loginfo(array.detected_objects)
-        if not len(array.detected_objects) == 0:
+    def get_detected_objects(self, array):
+        rospy.loginfo(array)
+        if not len(array.detected_objects.detected_objects) == 0:
             self._objects.clear()
-            for detection in array.detected_objects:
+            for detection in array.detected_objects.detected_objects:
                 self._objects.append((detection.type.data, detection.tf_id.data)) # adiciona um novo objeto a lista de objetos
 
 
@@ -41,7 +44,6 @@ class Objects:
         self._positions.clear()
         self._specific = {0: [0.0, 0.0, 0.0]}
         for obj_class, obj_frame in self._objects: # para cada objeto da lista de objetos
-            rospy.loginfo(obj_frame)
             if not obj_frame == '': # se o frame do objeto não for vazio
                 try: # tenta obter a posição do objeto
                     if target == '': # se não foi passado um tipo de objeto
@@ -67,6 +69,9 @@ class Objects:
     def handler(self, request):
         condition = request.condition.lower()
         succeeded = False
+
+        resp = self.detector()
+        self.get_detected_objects(resp)
 
         self._coordinates.x = 0.0
         self._coordinates.y = 0.0
@@ -146,7 +151,7 @@ class Objects:
 
         self.get_positions(obj_class) 
 
-        rospy.loginfo(self._specific[0])
+        #rospy.loginfo(self._specific[0])
 
         if self._specific is not None:
             x, y, z = self._specific[0]
